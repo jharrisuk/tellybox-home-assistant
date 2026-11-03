@@ -9,7 +9,7 @@
 					"token": "Home Assistant token"
 				},
 				"data_description": {
-					"url": "Use http://tellybox.local through the local reverse proxy; otherwise use http://SERVER_IP:8082.",
+					"url": "Use your Tellybox local viewing address, or the server IP address with port 8082. See the installation guide for examples.",
 					"token": "Create or rotate this token at Tellybox Installation settings, port 8990. It is shown once."
 				}
 			},
@@ -21,7 +21,7 @@
 					"token": "Home Assistant token"
 				},
 				"data_description": {
-					"url": "Use http://tellybox.local through the local reverse proxy; otherwise use http://SERVER_IP:8082.",
+					"url": "Use your Tellybox local viewing address, or the server IP address with port 8082. See the installation guide for examples.",
 					"token": "Create or rotate this token at Tellybox Installation settings, port 8990. It is shown once."
 				}
 			},
@@ -33,7 +33,7 @@
 					"token": "Home Assistant token"
 				},
 				"data_description": {
-					"url": "Use http://tellybox.local through the local reverse proxy; otherwise use http://SERVER_IP:8082.",
+					"url": "Use your Tellybox local viewing address, or the server IP address with port 8082. See the installation guide for examples.",
 					"token": "Create or rotate this token at Tellybox Installation settings, port 8990. It is shown once."
 				}
 			}

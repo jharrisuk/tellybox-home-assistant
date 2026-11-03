@@ -125,13 +125,13 @@ class TranslationTests(unittest.TestCase):
 		self.assertIn("already_configured", strings["abort"])
 		self.assertIn("wrong_installation", strings["abort"])
 
-	def test_translations_prefer_the_local_proxy_with_a_direct_ip_fallback(self) -> None:
+	def test_translations_describe_address_without_literal_urls(self) -> None:
 		strings = load(COMPONENT / "strings.json")
 		for step in strings["config"]["step"].values():
 			url = step["data_description"]["url"]
-			self.assertIn("http://tellybox.local", url)
-			self.assertNotIn("http://tellybox.local:8082", url)
-			self.assertIn("http://SERVER_IP:8082", url)
+			self.assertIn("local viewing address", url)
+			self.assertNotIn("http://", url)
+			self.assertIn("port 8082", url)
 
 
 class DocumentationTests(unittest.TestCase):
