@@ -1,0 +1,57 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Unit and packaging tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements_test.txt
+      - name: Run tests
+        run: python -m pytest -q
+
+  hassfest:
+    name: Hassfest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Validate integration metadata
+        uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Validate custom repository
+        uses: hacs/action@main
+        with:
+          category: integration
+          # No brand image is bundled. PolyForm Noncommercial is not an
+          # OSI-approved licence, so this repository cannot enter the default
+          # catalogue. Both checks are documented in README.md and
+          # FINDINGS.txt. Custom repository installation does not require them.
+          #
+          # HACS also checks the GitHub repository description, topics and
+          # Issues setting. Set those before the first push:
+          # description, topics home-assistant/hacs/tellybox, Issues enabled.
+          ignore: "brands license"

@@ -1,0 +1,12 @@
+{
+	"domain": "tellybox",
+	"name": "Tellybox",
+	"codeowners": ["@jharrisuk"],
+	"config_flow": true,
+	"documentation": "https://github.com/jharrisuk/tellybox-home-assistant",
+	"integration_type": "hub",
+	"iot_class": "local_polling",
+	"issue_tracker": "https://github.com/jharrisuk/tellybox-home-assistant/issues",
+	"requirements": [],
+	"version": "0.1.0"
+}
