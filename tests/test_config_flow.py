@@ -310,3 +310,41 @@ async def test_entry_setup_and_failed_poll_reports_offline(hass) -> None:
 	assert await hass.config_entries.async_unload(entry.entry_id)
 	await hass.async_block_till_done()
 	assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_disk_sensor_displays_gb_while_native_bytes_and_identity_stay_stable(hass) -> None:
+	"""Home Assistant converts the native byte value to GB for display."""
+	payload = stats()
+	payload["server"]["disks"] = [{
+		"id": "media",
+		"name": "Media",
+		"available_bytes": 500_000_000_000,
+		"total_bytes": 1_000_000_000_000,
+		"used_bytes": 500_000_000_000,
+	}]
+	entry = entry_for()
+	entry.add_to_hass(hass)
+
+	with patch(
+		"custom_components.tellybox.TellyboxApi.async_get_stats",
+		new=AsyncMock(return_value=payload),
+	):
+		assert await hass.config_entries.async_setup(entry.entry_id)
+		await hass.async_block_till_done()
+
+	registry = er.async_get(hass)
+	entity_id = registry.async_get_entity_id(
+		"sensor",
+		DOMAIN,
+		f"{entry.entry_id}_disk_media_available_bytes",
+	)
+	assert entity_id is not None
+	state = hass.states.get(entity_id)
+	assert state is not None
+	assert float(state.state) == 500.0
+	assert state.attributes["unit_of_measurement"] == "GB"
+	assert entry.runtime_data.data["server"]["disks"][0]["available_bytes"] == 500_000_000_000
+
+	assert await hass.config_entries.async_unload(entry.entry_id)
+	await hass.async_block_till_done()
+	assert entry.state is ConfigEntryState.NOT_LOADED

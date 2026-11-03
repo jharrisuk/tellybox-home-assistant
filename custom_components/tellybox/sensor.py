@@ -164,6 +164,7 @@ class TellyboxDiskSensor(TellyboxEntity, SensorEntity):
 
 	_attr_device_class = SensorDeviceClass.DATA_SIZE
 	_attr_native_unit_of_measurement = UnitOfInformation.BYTES
+	_attr_suggested_unit_of_measurement = UnitOfInformation.GIGABYTES
 	_attr_state_class = SensorStateClass.MEASUREMENT
 	_attr_suggested_display_precision = 1
 

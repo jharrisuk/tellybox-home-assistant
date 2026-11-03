@@ -1,0 +1,46 @@
+# Optional dark/lime theme for the Tellybox dashboard.
+#
+# Add this file to your Home Assistant configuration as `themes/tellybox.yaml`
+# and include the folder from configuration.yaml:
+#
+# frontend:
+#   themes: !include_dir_merge_named themes
+#
+# Then restart Home Assistant, or run Developer tools > Actions >
+# frontend.reload_themes. The dashboard view already uses `theme: Tellybox`.
+# If you prefer not to install a theme, remove that line from the dashboard.
+#
+# These are common theme variables, not mode-specific values. They apply when
+# the user has selected either a light or a dark frontend theme, so choosing
+# the Tellybox view theme always gives the same dashboard appearance.
+Tellybox:
+  primary-color: "#C7ED89"
+  accent-color: "#C7ED89"
+  primary-background-color: "#0B0E0B"
+  secondary-background-color: "#101410"
+  card-background-color: "#151A15"
+  ha-card-background: "#151A15"
+  primary-text-color: "#F3F3E9"
+  secondary-text-color: "#A6AFA1"
+  text-primary-color: "#0B0E0B"
+  disabled-text-color: "#6B7468"
+  divider-color: "rgba(243, 243, 233, 0.12)"
+  state-icon-color: "#C7ED89"
+  state-active-color: "#C7ED89"
+  state-inactive-color: "#6B7468"
+  state-binary_sensor-connectivity-on-color: "#C7ED89"
+  state-binary_sensor-connectivity-off-color: "#FF6B6B"
+  success-color: "#C7ED89"
+  warning-color: "#F2C14E"
+  error-color: "#FF6B6B"
+  info-color: "#8FD3FF"
+  sidebar-background-color: "#0B0E0B"
+  app-header-background-color: "#0B0E0B"
+  top-app-bar-background-color: "#0B0E0B"
+  ha-card-border-width: "1px"
+  ha-card-border-color: "rgba(199, 237, 137, 0.14)"
+  ha-card-border-radius: "18px"
+  ha-card-box-shadow: "0 10px 30px rgba(0, 0, 0, 0.28)"
+  ha-section-background-color: "rgba(21, 26, 21, 0.55)"
+  ha-section-border-radius: "22px"
+  lovelace-background: "radial-gradient(circle at 15% 0%, #1C2718 0%, #0B0E0B 48%, #080A08 100%)"

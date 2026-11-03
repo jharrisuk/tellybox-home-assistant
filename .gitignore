@@ -8,3 +8,4 @@ htmlcov/
 venv/
 .DS_Store
 Thumbs.db
+DASHBOARD-RESULT.txt

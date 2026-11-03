@@ -1,26 +1,267 @@
-# Replace the example entity IDs with those created by your Home Assistant entry.
-type: entities
+# Tellybox dashboard for Home Assistant 2026.10 or newer.
+#
+# Before use:
+# 1. Replace every sensor.tellybox_* and binary_sensor.tellybox_online below
+#    with the entity IDs created by ONE Tellybox entry. Replace the online ID
+#    in both the header badge and the two Markdown cards. The Overview and
+#    Storage cards scope their lookups to that device with device_id() and
+#    device_entities(), so entities from another Tellybox entry are ignored.
+# 2. Install the matching dark/lime theme from themes/tellybox.yaml, or remove
+#    `theme: Tellybox` from this view.
+#
+# The header wordmark uses Home Assistant's local brand API route
+# /api/brands/integration/{domain}/{image}, verified in Home Assistant 2026.10.
+# The native picture card asks the frontend to sign that brand request.
+#
+# Full-width cards use grid_options: columns: full. Only native Lovelace cards
+# are used.
+#
+# Unknown or unavailable readings render as an em dash (—), never as zero.
+# A real zero from Tellybox still renders as 0.
+
 title: Tellybox
-entities:
-  - entity: binary_sensor.tellybox_server_online
-    name: Online
-  - entity: sensor.tellybox_server_active_streams
-    name: Active streams
-  - entity: sensor.tellybox_server_connected_streams
-    name: Connected streams
-  - entity: sensor.tellybox_server_local_streams
-    name: Local streams
-  - entity: sensor.tellybox_server_remote_streams
-    name: Remote streams
-  - entity: sensor.tellybox_server_active_downloads
-    name: Active downloads
-  - entity: sensor.tellybox_server_measured_remote_upload
-    name: Measured remote upload
-  - entity: sensor.tellybox_server_configured_upload_limit
-    name: Upload cap
-  - entity: sensor.tellybox_server_uptime
-    name: Service uptime
-  - entity: sensor.tellybox_server_cpu_usage
-    name: CPU
-  - entity: sensor.tellybox_server_memory_usage
-    name: Memory
+views:
+  - title: Tellybox
+    path: tellybox
+    icon: mdi:television-classic
+    type: sections
+    max_columns: 3
+    theme: Tellybox
+    header:
+      layout: responsive
+      badges_position: top
+      card:
+        type: picture
+        image: /api/brands/integration/tellybox/dark_logo.png
+        alt_text: Tellybox
+        tap_action:
+          action: none
+    badges:
+      - type: entity
+        entity: binary_sensor.tellybox_online
+        name: Server
+        show_state: true
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Overview
+            icon: mdi:television-classic
+          - type: markdown
+            grid_options:
+              columns: full
+            content: |
+              {% set device = device_id('binary_sensor.tellybox_online') %}
+              {% set selected = device_entities(device) if device else [] %}
+              {% set refs = {
+                'active': 'sensor.tellybox_active_streams',
+                'connected': 'sensor.tellybox_connected_streams',
+                'local': 'sensor.tellybox_local_streams',
+                'remote': 'sensor.tellybox_remote_streams',
+                'downloads': 'sensor.tellybox_active_downloads',
+                'measured': 'sensor.tellybox_measured_remote_upload',
+                'uptime': 'sensor.tellybox_uptime'
+              } %}
+              {% macro scoped(entity_id) -%}
+                {%- if entity_id in selected -%}{{ entity_id }}{%- endif -%}
+              {%- endmacro %}
+              {% set ns = namespace(online=scoped('binary_sensor.tellybox_online'), active=scoped(refs.active), connected=scoped(refs.connected), local=scoped(refs.local), remote=scoped(refs.remote), downloads=scoped(refs.downloads), measured=scoped(refs.measured), uptime=scoped(refs.uptime)) %}
+              {% macro number(e, digits=0) -%}
+                {%- if e and is_number(states(e)) -%}
+                  {%- if digits > 0 -%}{{ states(e) | float | round(digits) }}{%- else -%}{{ states(e) | float | round(0) | int }}{%- endif -%}
+                {%- else -%}—{%- endif -%}
+              {%- endmacro %}
+              {% macro duration(e) -%}
+                {%- if e and is_number(states(e)) -%}
+                  {%- set unit = state_attr(e, 'unit_of_measurement') or 's' -%}
+                  {%- set factors = {'us': 0.000001, 'ms': 0.001, 's': 1, 'min': 60, 'h': 3600, 'd': 86400, 'w': 604800} -%}
+                  {%- set factor = factors.get(unit) -%}
+                  {%- if factor is none -%}—
+                  {%- else -%}
+                    {%- set seconds = states(e) | float(0) * factor -%}
+                    {%- set d = (seconds // 86400) | int -%}
+                    {%- set h = ((seconds % 86400) // 3600) | int -%}
+                    {%- set m = ((seconds % 3600) // 60) | int -%}
+                    {%- if d > 0 -%}{{ d }}d {{ h }}h
+                    {%- elif h > 0 -%}{{ h }}h {{ m }}m
+                    {%- else -%}{{ m }}m{%- endif -%}
+                  {%- endif -%}
+                {%- else -%}—{%- endif -%}
+              {%- endmacro %}
+              {% if ns.online and is_state(ns.online, 'on') %}
+              ### Online
+              {% elif ns.online and is_state(ns.online, 'off') %}
+              ### Offline
+              {% else %}
+              ### Status unknown
+              {% endif %}
+              **{{ number(ns.active) }}** active streams · **{{ number(ns.downloads) }}** downloads · **{{ number(ns.measured, 2) }} Mbit/s** upload
+
+              {{ number(ns.connected) }} connected ({{ number(ns.local) }} local, {{ number(ns.remote) }} remote) · uptime {{ duration(ns.uptime) }}
+          - type: tile
+            entity: binary_sensor.tellybox_online
+            name: Server
+            icon: mdi:access-point
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_active_streams
+            name: Active streams
+            icon: mdi:play-circle
+            color: "#C7ED89"
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_active_downloads
+            name: Downloads
+            icon: mdi:download
+            color: "#C7ED89"
+            vertical: true
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Activity
+            icon: mdi:account-group
+          - type: tile
+            entity: sensor.tellybox_active_streams
+            name: Active
+            icon: mdi:play-circle
+            color: "#C7ED89"
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_connected_streams
+            name: Connected
+            icon: mdi:account-group
+            color: "#C7ED89"
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_local_streams
+            name: Local
+            icon: mdi:lan
+            color: "#C7ED89"
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_remote_streams
+            name: Remote
+            icon: mdi:web
+            color: "#C7ED89"
+            vertical: true
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Upload
+            icon: mdi:upload-network
+          - type: history-graph
+            title: Upload history
+            hours_to_show: 24
+            min_y_axis: 0
+            expand_legend: true
+            grid_options:
+              columns: full
+            entities:
+              - entity: sensor.tellybox_measured_remote_upload
+                name: Measured
+                color: "#C7ED89"
+              - entity: sensor.tellybox_configured_upload_limit
+                name: Configured cap
+                color: "#A6AFA1"
+          - type: tile
+            entity: sensor.tellybox_measured_remote_upload
+            name: Measured upload
+            icon: mdi:upload-network
+            color: "#C7ED89"
+            vertical: true
+          - type: tile
+            entity: sensor.tellybox_configured_upload_limit
+            name: Upload cap
+            icon: mdi:speedometer
+            color: "#A6AFA1"
+            vertical: true
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Server
+            icon: mdi:server
+          - type: gauge
+            entity: sensor.tellybox_cpu_usage
+            name: CPU
+            min: 0
+            max: 100
+            needle: true
+            segments:
+              - from: 0
+                color: "#C7ED89"
+              - from: 70
+                color: "#F2C14E"
+              - from: 90
+                color: "#FF6B6B"
+          - type: gauge
+            entity: sensor.tellybox_memory_usage
+            name: Memory
+            min: 0
+            max: 100
+            needle: true
+            segments:
+              - from: 0
+                color: "#C7ED89"
+              - from: 70
+                color: "#F2C14E"
+              - from: 90
+                color: "#FF6B6B"
+          - type: tile
+            entity: sensor.tellybox_uptime
+            name: Service uptime
+            icon: mdi:clock-outline
+            color: "#C7ED89"
+            vertical: true
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Storage
+            icon: mdi:harddisk
+          - type: markdown
+            grid_options:
+              columns: full
+            content: |
+              {% set device = device_id('binary_sensor.tellybox_online') %}
+              {% set selected = device_entities(device) if device else [] %}
+              {% set disks = namespace(items=[]) %}
+              {% for e in selected %}
+                {% if e.startswith('sensor.') and state_attr(e, 'device_class') == 'data_size' %}
+                  {% set disks.items = disks.items + [e] %}
+                {% endif %}
+              {% endfor %}
+              {% macro available(e) -%}
+                {%- set raw = states(e) -%}
+                {%- if not is_number(raw) -%}—
+                {%- else -%}
+                  {%- set v = raw | float(0) -%}
+                  {%- set u = state_attr(e, 'unit_of_measurement') or 'B' -%}
+                  {%- if u == 'B' -%}
+                    {%- if v >= 1000000000000 -%}{{ (v / 1000000000000) | round(2) }} TB
+                    {%- elif v >= 1000000000 -%}{{ (v / 1000000000) | round(1) }} GB
+                    {%- elif v >= 1000000 -%}{{ (v / 1000000) | round(0) | int }} MB
+                    {%- else -%}{{ (v / 1000) | round(0) | int }} KB{%- endif -%}
+                  {%- elif u == 'TB' -%}{{ v | round(2) }} TB
+                  {%- elif u == 'GB' -%}
+                    {%- if v >= 1000 -%}{{ (v / 1000) | round(2) }} TB{%- else -%}{{ v | round(1) }} GB{%- endif -%}
+                  {%- elif u == 'MB' -%}{{ (v / 1000) | round(2) }} GB
+                  {%- elif u == 'kB' -%}{{ (v / 1000000) | round(2) }} GB
+                  {%- elif u == 'KiB' -%}{{ (v * 1024 / 1000000000) | round(2) }} GB
+                  {%- elif u == 'MiB' -%}{{ (v * 1048576 / 1000000000) | round(2) }} GB
+                  {%- elif u == 'GiB' -%}{{ (v * 1073741824 / 1000000000) | round(2) }} GB
+                  {%- elif u == 'TiB' -%}{{ (v * 1099511627776 / 1000000000) | round(2) }} GB
+                  {%- else -%}{{ v | round(1) }} {{ u }}{%- endif -%}
+                {%- endif -%}
+              {%- endmacro %}
+              {% if disks.items %}
+              | Disk | Available |
+              | :--- | ---: |
+              {% for e in disks.items | sort -%}
+              | {{ (state_attr(e, 'friendly_name') or e) | replace(' available space', '') }} | {{ available(e) }} |
+              {% endfor -%}
+              {% else %}
+              No disk readings are available. The host-health sample may be stale.
+              {% endif %}

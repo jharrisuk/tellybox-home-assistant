@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import struct
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -12,11 +13,21 @@ COMPONENT = ROOT / "custom_components" / "tellybox"
 MANIFEST = COMPONENT / "manifest.json"
 HACS = ROOT / "hacs.json"
 README = ROOT / "README.md"
+DASHBOARD = ROOT / "dashboard-example.yaml"
+THEME = ROOT / "themes" / "tellybox.yaml"
 
 
 def load(path: pathlib.Path):
 	"""Load one JSON file."""
 	return json.loads(path.read_text(encoding="utf-8"))
+
+
+def png_size(path: pathlib.Path) -> tuple[int, int]:
+	"""Return the width and height from a PNG IHDR chunk."""
+	data = path.read_bytes()
+	if data[:8] != b"\x89PNG\r\n\x1a\n":
+		raise AssertionError(f"{path.name} is not a PNG")
+	return struct.unpack(">II", data[16:24])
 
 
 class LayoutTests(unittest.TestCase):
@@ -25,13 +36,22 @@ class LayoutTests(unittest.TestCase):
 		self.assertTrue((COMPONENT / "manifest.json").is_file())
 		self.assertTrue((COMPONENT / "strings.json").is_file())
 		self.assertTrue((COMPONENT / "translations" / "en.json").is_file())
+		self.assertTrue((COMPONENT / "brand" / "icon.png").is_file())
 		self.assertTrue((ROOT / "hacs.json").is_file())
 		self.assertTrue((ROOT / "README.md").is_file())
-		self.assertFalse((ROOT / "custom_components" / "tellybox" / "brand").exists())
+		self.assertTrue(DASHBOARD.is_file())
+		self.assertTrue(THEME.is_file())
 
 	def test_only_one_integration_is_packaged(self) -> None:
 		integrations = [path.name for path in (ROOT / "custom_components").iterdir() if path.is_dir()]
 		self.assertEqual(integrations, ["tellybox"])
+
+	def test_brand_assets_follow_home_assistant_sizes(self) -> None:
+		brand = COMPONENT / "brand"
+		self.assertEqual(png_size(brand / "icon.png"), (256, 256))
+		self.assertEqual(png_size(brand / "icon@2x.png"), (512, 512))
+		self.assertEqual(png_size(brand / "dark_logo.png"), (768, 256))
+		self.assertEqual(png_size(brand / "dark_logo@2x.png"), (1536, 512))
 
 	def test_no_application_or_server_source_is_copied(self) -> None:
 		for forbidden in ("app", "server", "relay", "adbbridge", "gradle", "package.json"):
@@ -44,6 +64,7 @@ class LayoutTests(unittest.TestCase):
 		self.assertIn("__pycache__/", ignore)
 		self.assertIn("*.py[cod]", ignore)
 		self.assertIn(".pytest_cache/", ignore)
+		self.assertIn("DASHBOARD-RESULT.txt", ignore)
 
 
 class ManifestTests(unittest.TestCase):
@@ -63,7 +84,7 @@ class ManifestTests(unittest.TestCase):
 			"https://github.com/jharrisuk/tellybox-home-assistant/issues",
 		)
 		self.assertTrue(self.manifest["config_flow"])
-		self.assertEqual(self.manifest["version"], "0.1.0")
+		self.assertEqual(self.manifest["version"], "0.1.1")
 		self.assertEqual(self.manifest["integration_type"], "hub")
 		self.assertEqual(self.manifest["iot_class"], "local_polling")
 		self.assertEqual(self.manifest["requirements"], [])
@@ -104,6 +125,14 @@ class TranslationTests(unittest.TestCase):
 		self.assertIn("already_configured", strings["abort"])
 		self.assertIn("wrong_installation", strings["abort"])
 
+	def test_translations_prefer_the_local_proxy_with_a_direct_ip_fallback(self) -> None:
+		strings = load(COMPONENT / "strings.json")
+		for step in strings["config"]["step"].values():
+			url = step["data_description"]["url"]
+			self.assertIn("http://tellybox.local", url)
+			self.assertNotIn("http://tellybox.local:8082", url)
+			self.assertIn("http://SERVER_IP:8082", url)
+
 
 class DocumentationTests(unittest.TestCase):
 	def setUp(self) -> None:
@@ -115,10 +144,36 @@ class DocumentationTests(unittest.TestCase):
 		self.assertIn("Add from link", self.readme)
 		self.assertIn("Custom repositories", self.readme)
 
-	def test_readme_documents_ports_and_endpoint(self) -> None:
+	def test_readme_documents_ports_and_the_conditional_hostname(self) -> None:
 		self.assertIn("8990", self.readme)
 		self.assertIn("8082", self.readme)
 		self.assertIn("/api/integrations/home-assistant/stats", self.readme)
+		self.assertIn("http://tellybox.local", self.readme)
+		self.assertNotIn("http://tellybox.local:8082", self.readme)
+		self.assertIn("do not add `:8082`", self.readme)
+		self.assertIn("local reverse proxy", self.readme)
+		self.assertIn("http://SERVER_IP:8082", self.readme)
+
+	def test_readme_documents_the_dashboard_and_entity_replacement(self) -> None:
+		self.assertIn("dashboard-example.yaml", self.readme)
+		self.assertIn("themes/tellybox.yaml", self.readme)
+		self.assertIn("device_id('binary_sensor.tellybox_online')", self.readme)
+		self.assertIn("device_entities()", self.readme)
+		self.assertNotIn("integration_entities('tellybox')", self.readme)
+		self.assertIn("Settings > Devices & services > Tellybox > Entities", self.readme)
+		self.assertIn("GB or TB", self.readme)
+		self.assertIn("never turned into `0`", self.readme)
+
+	def test_readme_documents_branding_and_the_dark_logo_limitation(self) -> None:
+		self.assertIn("custom_components/tellybox/brand/", self.readme)
+		self.assertIn("Home Assistant 2026.3", self.readme)
+		self.assertIn("falls back to the square icon", self.readme)
+		self.assertIn("Tellybox brand assets", self.readme)
+		self.assertIn("/api/brands/integration/tellybox/dark_logo.png", self.readme)
+		self.assertIn("#5402", self.readme)
+		self.assertIn("#5171", self.readme)
+		self.assertIn("catalogue thumbnail", self.readme)
+		self.assertIn("cannot correct every HACS UI version", self.readme)
 
 	def test_readme_documents_restart_and_release_updates(self) -> None:
 		self.assertIn("restart Home Assistant", self.readme)
@@ -128,9 +183,8 @@ class DocumentationTests(unittest.TestCase):
 		self.assertIn("2026.10.0", self.readme)
 		self.assertIn("Home Assistant 2026.9 and earlier", self.readme)
 
-	def test_readme_documents_the_licence_and_check_exceptions(self) -> None:
+	def test_readme_documents_the_licence_and_check_exception(self) -> None:
 		self.assertIn("PolyForm Noncommercial License 1.0.0", self.readme)
-		self.assertIn("`brands`", self.readme)
 		self.assertIn("`license`", self.readme)
 		self.assertIn("not an OSI-approved open-source licence", self.readme)
 
@@ -173,10 +227,16 @@ class SourceTests(unittest.TestCase):
 				if line.startswith(" "):
 					self.fail(f"{path.name}:{number} starts with spaces")
 
-	def test_ci_skips_only_the_documented_hacs_checks(self) -> None:
+	def test_disk_sensor_keeps_native_bytes_and_suggests_gb(self) -> None:
+		source = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+		self.assertIn("_attr_native_unit_of_measurement = UnitOfInformation.BYTES", source)
+		self.assertIn("_attr_suggested_unit_of_measurement = UnitOfInformation.GIGABYTES", source)
+
+	def test_ci_skips_only_the_documented_hacs_license_check(self) -> None:
 		workflow = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
 		self.assertIn("hacs/action@main", workflow)
-		self.assertIn('ignore: "brands license"', workflow)
+		self.assertIn('ignore: "license"', workflow)
+		self.assertNotIn('ignore: "brands license"', workflow)
 		self.assertNotIn("ignore: \"*\"", workflow)
 
 
@@ -190,9 +250,9 @@ class LicenceTests(unittest.TestCase):
 	def test_scope_does_not_claim_osi_approval(self) -> None:
 		scope = (ROOT / "LICENSE-SCOPE.md").read_text(encoding="utf-8")
 		self.assertIn("not OSI-approved open-source software", scope)
-		self.assertIn("not included in this repository", scope)
+		self.assertIn("brand images in `custom_components/tellybox/brand/`", scope)
+		self.assertIn("not licensed as general-purpose artwork", scope)
 
 
 if __name__ == "__main__":
 	unittest.main()
-

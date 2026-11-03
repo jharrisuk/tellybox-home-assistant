@@ -46,12 +46,12 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-          # No brand image is bundled. PolyForm Noncommercial is not an
-          # OSI-approved licence, so this repository cannot enter the default
-          # catalogue. Both checks are documented in README.md and
-          # FINDINGS.txt. Custom repository installation does not require them.
+          # Brand assets are bundled under custom_components/tellybox/brand.
+          # PolyForm Noncommercial is not an OSI-approved licence, so only the
+          # license check is skipped. The repository is documented as a custom
+          # repository and is not submitted to the default catalogue.
           #
           # HACS also checks the GitHub repository description, topics and
           # Issues setting. Set those before the first push:
           # description, topics home-assistant/hacs/tellybox, Issues enabled.
-          ignore: "brands license"
+          ignore: "license"
