@@ -1,0 +1,146 @@
+# Tellybox compact card for Home Assistant 2026.10 or newer.
+#
+# This is one native Lovelace vertical-stack card, not a custom card. Copy the
+# whole file into a dashboard, then replace every sensor.tellybox_* and
+# binary_sensor.tellybox_online placeholder with the entity IDs from ONE
+# Tellybox entry.
+#
+# The header uses a native picture card with the verified Home Assistant brand
+# route. For a personal preview only, replace that image with
+# /local/dark_logo.png if you have copied the supplied wordmark there. Do not
+# change the brand route in a shared copy.
+#
+# Details uses a native button with a navigate action to the full dashboard at
+# /dashboard-tellybox/tellybox. If this card is installed on that view itself,
+# change the navigation path to a separate details subview (for example
+# /dashboard-tellybox/details) so it does not navigate back to the same view.
+#
+# Unknown or unavailable readings render as an em dash (—), never as zero.
+# A real zero from Tellybox still renders as 0. Storage is converted from the
+# entity's native unit to compact GB/TB. Disk labels drop the selected device's
+# name so rows stay short.
+
+type: vertical-stack
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: picture
+        image: /api/brands/integration/tellybox/dark_logo.png
+        alt_text: Tellybox
+        tap_action:
+          action: none
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            text_only: true
+            content: |
+              {% set online = 'binary_sensor.tellybox_online' %}
+              {% set device = device_id(online) %}
+              {% set selected = device_entities(device) if device else [] %}
+              {% set online_scoped = online if online in selected else none %}
+              Server {% if online_scoped and is_state(online_scoped, 'on') %}**Online**{% elif online_scoped and is_state(online_scoped, 'off') %}**Offline**{% else %}**Status —**{% endif %}
+          - type: button
+            name: Details
+            show_name: true
+            show_icon: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-tellybox/tellybox
+
+  - type: markdown
+    content: |
+      {% set online = 'binary_sensor.tellybox_online' %}
+      {% set device = device_id(online) %}
+      {% set selected = device_entities(device) if device else [] %}
+      {% set device_name = device_attr(device, 'name') if device else '' %}
+      {% set refs = {
+        'active': 'sensor.tellybox_active_streams',
+        'downloads': 'sensor.tellybox_active_downloads',
+        'local': 'sensor.tellybox_local_streams',
+        'remote': 'sensor.tellybox_remote_streams',
+        'measured': 'sensor.tellybox_measured_remote_upload',
+        'cap': 'sensor.tellybox_configured_upload_limit'
+      } %}
+      {% macro scoped(entity_id) -%}
+        {%- if entity_id in selected -%}{{ entity_id }}{%- endif -%}
+      {%- endmacro %}
+      {% set ns = namespace(active=scoped(refs.active), downloads=scoped(refs.downloads), local=scoped(refs.local), remote=scoped(refs.remote), measured=scoped(refs.measured), cap=scoped(refs.cap)) %}
+      {% macro count(e) -%}
+        {%- if e and is_number(states(e)) -%}{{ states(e) | float | round(0) | int }}{%- else -%}—{%- endif -%}
+      {%- endmacro %}
+      {% macro number(e) -%}
+        {%- if e and is_number(states(e)) -%}{{ states(e) | float | round(2) }}{%- else -%}—{%- endif -%}
+      {%- endmacro %}
+      {% macro unit(e, fallback) -%}
+        {%- if e -%}{{ state_attr(e, 'unit_of_measurement') or fallback }}{%- else -%}{{ fallback }}{%- endif -%}
+      {%- endmacro %}
+      {% macro cap(e) -%}
+        {%- if e and is_number(states(e)) -%}
+          {%- if states(e) | float == 0 -%}unlimited
+          {%- else -%}
+            {%- set value = states(e) | float | round(2) -%}
+            {%- if value == value | int -%}{{ value | int }} {{ unit(e, 'Mbit/s') }}
+            {%- else -%}{{ value }} {{ unit(e, 'Mbit/s') }}
+            {%- endif -%}
+          {%- endif -%}
+        {%- else -%}—
+        {%- endif -%}
+      {%- endmacro %}
+      {% macro space(e) -%}
+        {%- set raw = states(e) -%}
+        {%- if not is_number(raw) -%}—
+        {%- else -%}
+          {%- set v = raw | float(0) -%}
+          {%- set u = state_attr(e, 'unit_of_measurement') or 'B' -%}
+          {%- set factors = {
+            'B': 1, 'byte': 1, 'bytes': 1,
+            'kB': 1000, 'KB': 1000,
+            'MB': 1000000,
+            'GB': 1000000000,
+            'TB': 1000000000000,
+            'KiB': 1024,
+            'MiB': 1048576,
+            'GiB': 1073741824,
+            'TiB': 1099511627776
+          } -%}
+          {%- set factor = factors.get(u) -%}
+          {%- if factor is none -%}{{ v | round(1) }} {{ u }}
+          {%- else -%}
+            {%- set bytes = v * factor -%}
+            {%- if bytes >= 1000000000000 -%}{{ (bytes / 1000000000000) | round(2) }} TB
+            {%- else -%}{{ (bytes / 1000000000) | round(1) }} GB
+            {%- endif -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endmacro %}
+      {% macro disk_label(e) -%}
+        {%- set name = state_attr(e, 'friendly_name') or e -%}
+        {%- set name = name | replace(' available space', '') | replace(' disk', '') -%}
+        {%- if device_name and name.startswith(device_name) -%}
+          {%- set name = name[device_name | length:] -%}
+        {%- endif -%}
+        {%- set name = name | trim -%}
+        {%- if name[:1] in ['-', '–', '—', ':', '·'] -%}
+          {%- set name = name[1:] | trim -%}
+        {%- endif -%}
+        {{- name -}}
+      {%- endmacro %}
+      {% set disks = namespace(items=[]) %}
+      {% for e in selected %}
+        {% if e.startswith('sensor.') and state_attr(e, 'device_class') == 'data_size' %}
+          {% set disks.items = disks.items + [e] %}
+        {% endif %}
+      {% endfor %}
+      <table role="presentation" width="100%"><tr><td align="center" width="25%"><strong>{{ count(ns.active) }}</strong><br><small>Watching</small></td><td align="center" width="25%"><strong>{{ count(ns.downloads) }}</strong><br><small>Downloads</small></td><td align="center" width="25%"><strong>{{ count(ns.local) }}</strong><br><small>Local</small></td><td align="center" width="25%"><strong>{{ count(ns.remote) }}</strong><br><small>Remote</small></td></tr></table>
+
+      Upload **{{ number(ns.measured) }}** {{ unit(ns.measured, 'Mbit/s') }} · cap **{{ cap(ns.cap) }}**
+
+      {% if disks.items %}
+      | Disk | Free |
+      | :--- | ---: |
+      {% for e in disks.items | sort -%}
+      | {{ disk_label(e) }} | **{{ space(e) }}** |
+      {% endfor -%}
+      {% else %}
+      **Storage** —
+      {% endif %}

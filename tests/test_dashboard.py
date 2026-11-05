@@ -10,6 +10,7 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DASHBOARD = ROOT / "dashboard-example.yaml"
+COMPACT = ROOT / "dashboard-compact-card.yaml"
 THEME = ROOT / "themes" / "tellybox.yaml"
 BRAND_ROUTE = "/api/brands/integration/tellybox/dark_logo.png"
 
@@ -74,6 +75,7 @@ class FakeHomeAssistant:
 		attributes,
 		device_map: dict[str, str] | None = None,
 		device_entities_map: dict[str, list[str]] | None = None,
+		device_names: dict[str, str] | None = None,
 	) -> None:
 		self.entities = list(entities)
 		self.state_values = states
@@ -89,6 +91,7 @@ class FakeHomeAssistant:
 					grouped.setdefault(device, []).append(entity)
 			device_entities_map = grouped
 		self.device_entities_map = device_entities_map
+		self.device_names = device_names or {}
 
 	def integration_entities(self, domain: str) -> list[str]:
 		return list(self.entities) if domain == "tellybox" else []
@@ -98,6 +101,11 @@ class FakeHomeAssistant:
 
 	def device_entities(self, device: str) -> list[str]:
 		return list(self.device_entities_map.get(device, []))
+
+	def device_attr(self, device: str, attribute: str):
+		if attribute == "name":
+			return self.device_names.get(device)
+		return None
 
 	def states(self, entity: str) -> str:
 		return self.state_values.get(entity, "unknown")
@@ -124,6 +132,7 @@ def render(content: str, fake: FakeHomeAssistant) -> str:
 		integration_entities=fake.integration_entities,
 		device_id=fake.device_id,
 		device_entities=fake.device_entities,
+		device_attr=fake.device_attr,
 		states=fake.states,
 		state_attr=fake.state_attr,
 		is_state=fake.is_state,
@@ -390,6 +399,224 @@ class DashboardTests(unittest.TestCase):
 			),
 		)
 		self.assertIn("No disk readings are available", rendered)
+
+
+class CompactDashboardTests(unittest.TestCase):
+	def setUp(self) -> None:
+		self.raw = COMPACT.read_text(encoding="utf-8")
+		self.config = yaml.safe_load(self.raw)
+		self.contents = markdown_contents(self.config)
+
+	def test_compact_card_is_a_native_vertical_stack(self) -> None:
+		self.assertEqual(self.config["type"], "vertical-stack")
+		self.assertEqual(len(self.config["cards"]), 2)
+		types = {value for value in values_for_key(self.config, "type") if isinstance(value, str)}
+		self.assertLessEqual(
+			types,
+			{"vertical-stack", "horizontal-stack", "picture", "markdown", "button"},
+		)
+		self.assertNotIn("custom:", self.raw)
+		self.assertNotIn("card-mod", self.raw)
+		self.assertNotIn("\t", self.raw)
+		self.assertIn("<table", self.raw)
+		self.assertNotIn("<a ", self.raw)
+		self.assertNotIn("<img", self.raw)
+
+	def test_compact_header_uses_a_native_picture_and_button(self) -> None:
+		header = self.config["cards"][0]
+		picture = header["cards"][0]
+		button = header["cards"][1]["cards"][1]
+		self.assertEqual(picture["type"], "picture")
+		self.assertEqual(picture["image"], BRAND_ROUTE)
+		self.assertEqual(picture["alt_text"], "Tellybox")
+		self.assertEqual(button["type"], "button")
+		self.assertEqual(button["show_name"], True)
+		self.assertEqual(button["show_icon"], False)
+		self.assertEqual(button["tap_action"]["action"], "navigate")
+		self.assertEqual(button["tap_action"]["navigation_path"], "/dashboard-tellybox/tellybox")
+		self.assertNotIn("icon: mdi:information-outline", self.raw)
+
+	def test_compact_templates_parse_without_indented_html(self) -> None:
+		for content in self.contents:
+			jinja2.Environment().parse(content)
+			for line in content.splitlines():
+				if line.lstrip().startswith("<"):
+					self.assertFalse(line.startswith(" "), line)
+
+	def test_compact_renders_status_zero_and_unknown_values(self) -> None:
+		entities = list(EXPECTED_ENTITIES)
+		states = dict(SUMMARY_VALUES)
+		states.update(
+			{
+				"sensor.tellybox_active_streams": "0",
+				"sensor.tellybox_remote_streams": "unknown",
+			}
+		)
+		attributes = {entity: {} for entity in entities}
+		attributes["sensor.tellybox_measured_remote_upload"]["unit_of_measurement"] = "Mbit/s"
+		attributes["sensor.tellybox_configured_upload_limit"]["unit_of_measurement"] = "Mbit/s"
+		fake = FakeHomeAssistant(entities, states, attributes, device_names={"device-single": "Tellybox"})
+		status = next(content for content in self.contents if "Server" in content)
+		body = next(content for content in self.contents if "Upload" in content)
+
+		self.assertIn("Server **Online**", render(status, fake))
+		rendered_body = render(body, fake)
+		self.assertIn("<strong>0</strong><br><small>Watching</small>", rendered_body)
+		self.assertIn("<strong>1</strong><br><small>Downloads</small>", rendered_body)
+		self.assertIn("<strong>2</strong><br><small>Local</small>", rendered_body)
+		self.assertIn("<strong>—</strong><br><small>Remote</small>", rendered_body)
+		stats_line = next(line for line in rendered_body.splitlines() if "<table" in line)
+		self.assertTrue(stats_line.startswith("<table"))
+		self.assertEqual(stats_line.count('width="25%"'), 4)
+		self.assertNotIn("\n", stats_line)
+		self.assertIn("Upload **3.25** Mbit/s", rendered_body)
+		self.assertIn("cap **50 Mbit/s**", rendered_body)
+
+	def test_compact_renders_unknown_status_and_unlimited_cap(self) -> None:
+		entities = list(EXPECTED_ENTITIES)
+		states = dict(SUMMARY_VALUES)
+		states["binary_sensor.tellybox_online"] = "unavailable"
+		states["sensor.tellybox_measured_remote_upload"] = "unknown"
+		states["sensor.tellybox_configured_upload_limit"] = "0"
+		attributes = {entity: {} for entity in entities}
+		fake = FakeHomeAssistant(entities, states, attributes, device_names={"device-single": "Tellybox"})
+
+		status = next(content for content in self.contents if "Server" in content)
+		body = next(content for content in self.contents if "Upload" in content)
+		self.assertIn("Server **Status —**", render(status, fake))
+		rendered_body = render(body, fake)
+		self.assertIn("Upload **—** Mbit/s", rendered_body)
+		self.assertIn("cap **unlimited**", rendered_body)
+
+	def test_compact_storage_converts_native_units_and_drops_device_prefix(self) -> None:
+		entities = [
+			"binary_sensor.tellybox_online",
+			"sensor.media_available_space",
+			"sensor.archive_available_space",
+			"sensor.backup_available_space",
+			"sensor.cloud_available_space",
+			"sensor.stale_available_space",
+		]
+		states = {
+			"binary_sensor.tellybox_online": "on",
+			"sensor.media_available_space": "500.0",
+			"sensor.archive_available_space": "1500",
+			"sensor.backup_available_space": "2500000000000",
+			"sensor.cloud_available_space": "500000",
+			"sensor.stale_available_space": "unknown",
+		}
+		device_name = "Tellybox (tellybox.local)"
+		attributes = {
+			"sensor.media_available_space": {
+				"friendly_name": f"{device_name} Media disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "GB",
+			},
+			"sensor.archive_available_space": {
+				"friendly_name": f"{device_name} Archive disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "GB",
+			},
+			"sensor.backup_available_space": {
+				"friendly_name": f"{device_name} Backup disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "B",
+			},
+			"sensor.cloud_available_space": {
+				"friendly_name": f"{device_name} Cloud disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "kB",
+			},
+			"sensor.stale_available_space": {
+				"friendly_name": f"{device_name} Stale disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "GB",
+			},
+		}
+		body = next(content for content in self.contents if "Upload" in content)
+		fake = FakeHomeAssistant(
+			entities,
+			states,
+			attributes,
+			device_names={"device-single": device_name},
+		)
+		rendered = render(body, fake)
+		self.assertIn("| Media | **500.0 GB** |", rendered)
+		self.assertIn("| Archive | **1.5 TB** |", rendered)
+		self.assertIn("| Backup | **2.5 TB** |", rendered)
+		self.assertIn("| Cloud | **0.5 GB** |", rendered)
+		self.assertIn("| Stale | **—** |", rendered)
+		self.assertNotIn(device_name, rendered)
+		self.assertNotIn("disk available space", rendered)
+		self.assertNotIn("2500000000000", rendered)
+		self.assertNotIn("500000", rendered)
+
+	def test_compact_storage_only_lists_the_selected_device(self) -> None:
+		selected = [
+			"binary_sensor.tellybox_online",
+			"sensor.tellybox_active_streams",
+			"sensor.tellybox_media_available_space",
+		]
+		other = [
+			"binary_sensor.tellybox_2_online",
+			"sensor.tellybox_2_active_streams",
+			"sensor.tellybox_2_media_available_space",
+		]
+		entities = selected + other
+		states = {
+			"binary_sensor.tellybox_online": "on",
+			"binary_sensor.tellybox_2_online": "on",
+			"sensor.tellybox_active_streams": "2",
+			"sensor.tellybox_2_active_streams": "99",
+			"sensor.tellybox_media_available_space": "500",
+			"sensor.tellybox_2_media_available_space": "900",
+		}
+		attributes = {
+			"sensor.tellybox_media_available_space": {
+				"friendly_name": "Tellybox Media disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "GB",
+			},
+			"sensor.tellybox_2_media_available_space": {
+				"friendly_name": "Tellybox 2 Media disk available space",
+				"device_class": "data_size",
+				"unit_of_measurement": "GB",
+			},
+		}
+		device_map = {entity: "device-selected" for entity in selected}
+		device_map.update({entity: "device-other" for entity in other})
+		fake = FakeHomeAssistant(
+			entities,
+			states,
+			attributes,
+			device_map=device_map,
+			device_entities_map={
+				"device-selected": selected,
+				"device-other": other,
+			},
+			device_names={
+				"device-selected": "Tellybox",
+				"device-other": "Tellybox 2",
+			},
+		)
+		body = next(content for content in self.contents if "Upload" in content)
+		rendered = render(body, fake)
+		self.assertIn("| Media | **500.0 GB** |", rendered)
+		self.assertNotIn("Tellybox 2", rendered)
+		self.assertIn("<strong>2</strong><br><small>Watching</small>", rendered)
+		self.assertNotIn("<strong>99</strong><br><small>Watching</small>", rendered)
+
+	def test_compact_storage_handles_an_installation_without_disks(self) -> None:
+		body = next(content for content in self.contents if "Upload" in content)
+		rendered = render(
+			body,
+			FakeHomeAssistant(
+				["binary_sensor.tellybox_online"],
+				{"binary_sensor.tellybox_online": "on"},
+				{},
+			),
+		)
+		self.assertIn("**Storage** —", rendered)
 
 
 class ThemeTests(unittest.TestCase):

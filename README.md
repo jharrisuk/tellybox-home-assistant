@@ -2,9 +2,11 @@
 
 A small, read-only Home Assistant custom integration for Tellybox. It polls one versioned statistics endpoint every 30 seconds and exposes aggregate stream, download, upload and server health values.
 
-The repository also includes a native sections dashboard with a dark/lime Tellybox theme. The dashboard uses only built-in Lovelace cards: no custom cards, card-mod or frontend dependencies.
+The repository also includes a native sections dashboard with a dark/lime Tellybox theme, a native compact card and an optional custom button-card panel. The full dashboard and compact card use only built-in Lovelace cards: no custom cards, card-mod or frontend dependencies. The optional button-card panel needs the `button-card` frontend card, installed separately through HACS.
 
 This is a custom repository. It is not an official Home Assistant integration and it is not in the default HACS catalogue. Add the repository URL manually as described below.
+
+The Tellybox server and the HomeLab installation guide live in the separate public [Tellybox HomeLab repository](https://github.com/jharrisuk/tellybox-homelab). That repository links back to this Home Assistant integration repository. Use it for server installation, the token screen and the full HomeLab walkthrough.
 
 ## Requirements
 
@@ -61,7 +63,7 @@ If the token is rotated or revoked, Home Assistant shows a reauthentication prom
 
 ## Add the dashboard
 
-The dashboard is native Lovelace YAML. It uses sections, heading, picture, tile and gauge cards, a history graph and Markdown cards. Nothing needs to be installed from HACS frontend repositories.
+The full dashboard and the compact alternative are native Lovelace YAML. They use sections, heading, picture, tile and gauge cards, a history graph and Markdown cards. The optional custom button-card panel in step 5 needs one HACS frontend dependency, `button-card`; the other dashboard files need nothing from HACS frontend repositories.
 
 ### 1. Optional dark/lime theme
 
@@ -109,6 +111,64 @@ The **Overview** and **Storage** cards are scoped to one entry. They use `device
 Storage is shown in GB or TB. The disk sensors keep their native bytes value and stable unique ID, but Home Assistant displays GB by default for new entities. If an existing disk entity still shows bytes, change its unit to GB in the entity settings; the dashboard storage table handles either unit.
 
 Unknown or unavailable readings render as an em dash (`—`) in the Markdown cards, and as unavailable in the native cards. They are never turned into `0`. A real zero reported by Tellybox, such as no active streams, still shows `0`.
+
+### 4. Optional compact panel
+
+`dashboard-compact-card.yaml` is one compact native Lovelace vertical-stack card. It uses a native picture card for the logo and a native **Details** button. It shows status, active streams and downloads, local and remote sessions, upload rate and cap, and compact GB/TB storage. It does not use custom cards.
+
+1. In any dashboard, choose **Edit dashboard > Add card > Manual**, or open the raw configuration editor and paste the card under `cards:`.
+2. Copy the whole contents of `dashboard-compact-card.yaml`.
+3. Replace every `sensor.tellybox_*` and `binary_sensor.tellybox_online` placeholder with entity IDs from the same Tellybox entry. Use `http://tellybox.local` as the default integration address when the local reverse proxy resolves; use `http://SERVER_IP:8082` only as the direct fallback.
+4. The **Details** button navigates to `/dashboard-tellybox/tellybox`. If you install the card on that view itself, change `navigation_path` to a separate details subview, such as `/dashboard-tellybox/details`, and set `subview: true` on that view so it does not appear as a second normal tab.
+5. The shared card uses Home Assistant's local brand route for the wordmark in a native picture card, which signs the request. For a personal preview only, you may replace it with `/local/dark_logo.png` after copying the supplied logo there.
+
+The compact card keeps unknown values as `—`; it never turns a missing reading into `0`. Extra metrics such as connected sessions, uptime, CPU, memory and the full disk table remain in the full dashboard or a details subview.
+
+### 5. Custom button-card panel (optional)
+
+`dashboard-button-card.yaml` is one `custom:button-card` panel in the supplied dark/lime Tellybox style. It shows the wordmark, server status, uptime, active streams, upload rate and cap, connected/local/remote sessions, downloads and an upload meter. The native compact card in step 4 remains the no-dependency alternative.
+
+#### Install the button-card frontend dependency
+
+1. In Home Assistant, open **HACS > Frontend**.
+2. Search for **button-card**, open it and choose **Download**.
+3. Reload the browser when HACS asks. If the card is still reported as missing, restart Home Assistant and hard-refresh the browser.
+4. This is the Lovelace `button-card` frontend card, not a Tellybox integration and not a custom repository. Do not add it as an integration.
+
+`dashboard-button-card.yaml` uses only `custom:button-card`. It does not need card-mod or any other frontend dependency.
+
+#### Put the existing Tellybox wordmark in a portable location
+
+The integration already ships the wordmark at `custom_components/tellybox/brand/dark_logo.png`. No new brand asset is added for this card.
+
+1. In your Home Assistant configuration directory, create `www/tellybox/` if it does not exist.
+2. Copy `custom_components/tellybox/brand/dark_logo.png` to `www/tellybox/dark_logo.png`.
+3. The card then uses `/local/tellybox/dark_logo.png`, which Home Assistant serves from `www/tellybox/dark_logo.png`.
+4. If you keep the image elsewhere, change the `logo` variable once. Set `logo: ''` to show a plain text wordmark instead.
+
+Only copy the wordmark that is already bundled with this integration. Do not add a separate logo file or a new brand variant.
+
+#### Add the card and set the prefix once
+
+1. Open any dashboard, choose **Edit dashboard > Add card > Manual**, or open the raw configuration editor and add the card under `cards:`.
+2. Copy the whole contents of `dashboard-button-card.yaml`.
+3. Set `entity_prefix` once in the card's `variables` block. The default `tellybox_tellybox_local` matches the default integration entry title **Tellybox (tellybox.local)**, which creates IDs such as `sensor.tellybox_tellybox_local_active_streams` and `binary_sensor.tellybox_tellybox_local_online`.
+4. If your entity IDs differ, open **Settings > Devices & services > Tellybox > Entities**, copy the shared prefix from one sensor, and replace `tellybox_tellybox_local` once. Use only the shared prefix. A leading `sensor.` or `binary_sensor.` is ignored, but do not paste the final entity name as well.
+5. Leave `logo: /local/tellybox/dark_logo.png` unless you placed the wordmark somewhere else.
+6. Save the dashboard.
+
+The card assumes the default Tellybox integration address `http://tellybox.local`. That address is configured on the integration entry, not in the card. If the local reverse proxy does not resolve, use `http://SERVER_IP:8082` on the integration entry as described above.
+
+#### What the card does with awkward values
+
+- **Unknown or unavailable:** the status pill says **UNKNOWN**, and affected readings show `—`. Missing values are never converted to `0`; a real zero from Tellybox still shows `0`.
+- **Unlimited upload cap:** a configured cap of `0` shows `∞`, the small label says **Unlimited cap**, and the meter reads **Unlimited upload cap**. No division is attempted.
+- **Invalid numbers:** malformed, negative or non-numeric readings stay `—`. The card does not print `NaN` or `Infinity`.
+- **Uptime units:** seconds, milliseconds, microseconds, minutes, hours, days and weeks are converted to a compact `1d 2h`, `2h 15m` or `45m` form. An unrecognised unit shows `—` rather than the raw state.
+- **HTML safety:** entity units, uptime text and the logo path are HTML-escaped before they enter the panel markup, so a malformed attribute cannot inject HTML.
+- **Multiple installations:** the prefix selects one Tellybox installation. Use a separate card with a different `entity_prefix` for a second installation.
+
+For the full native dashboard, see step 2. For the native compact card with no frontend dependency, use `dashboard-compact-card.yaml` from step 4.
 
 ## Branding
 
@@ -193,7 +253,7 @@ From the repository root:
 python -m pytest
 ```
 
-The test suite covers URL and token validation, the statistics allowlist, failure mapping, config and reconfiguration flows, entity translation keys, disk unit conversion through Home Assistant, dashboard YAML and template syntax, and packaging requirements. CI also runs the HACS validation action and hassfest.
+The test suite covers URL and token validation, the statistics allowlist, failure mapping, config and reconfiguration flows, entity translation keys, disk unit conversion through Home Assistant, dashboard YAML and template syntax, the compact card, the button-card YAML and JavaScript behaviour, and packaging requirements. CI also runs the button-card logic tests, the HACS validation action and hassfest.
 
 ## Licence
 

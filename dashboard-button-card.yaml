@@ -1,0 +1,228 @@
+# Tellybox custom button-card panel for Home Assistant 2026.10 or newer.
+#
+# This is one custom:button-card panel. Install the frontend dependency first:
+# HACS > Frontend > button-card > Download, then reload the browser. It is not
+# a Home Assistant integration and does not replace the Tellybox integration.
+#
+# Before use:
+# 1. Copy the bundled wordmark from
+#    custom_components/tellybox/brand/dark_logo.png
+#    to <config>/www/tellybox/dark_logo.png. The default logo path below is
+#    /local/tellybox/dark_logo.png. Change `logo` once if you use another path.
+# 2. Change `entity_prefix` once if your entity IDs are not the defaults.
+#    With the default entry title Tellybox (tellybox.local), Home Assistant
+#    creates binary_sensor.tellybox_tellybox_local_online and sensors such as
+#    sensor.tellybox_tellybox_local_active_streams. The prefix is the shared
+#    part between the domain and the final name, without `sensor.` or
+#    `binary_sensor.`.
+# 3. Copy this whole file into a dashboard with Edit dashboard > Add card >
+#    Manual. The card uses only button-card; no card-mod is required.
+#
+# The server address for the integration, not this card, defaults to
+# http://tellybox.local when the local reverse proxy resolves.
+#
+# Unknown, unavailable or invalid readings render as an em dash (—), never as
+# zero. A real zero from Tellybox still renders as 0. A configured upload cap
+# of 0 is shown as unlimited. Numeric values are parsed strictly, units come
+# from the entity attributes, and every injected value is HTML-escaped before
+# it reaches the card markup.
+
+type: custom:button-card
+show_name: false
+show_icon: false
+show_state: false
+tap_action:
+  action: none
+hold_action:
+  action: none
+triggers_update: all
+variables:
+  entity_prefix: tellybox_tellybox_local
+  logo: /local/tellybox/dark_logo.png
+custom_fields:
+  panel: |
+    [[[
+      const config = (typeof variables === 'object' && variables !== null) ? variables : {};
+      const defaultPrefix = 'tellybox_tellybox_local';
+      const configuredPrefix = String(config.entity_prefix || '').trim();
+      const prefix = (configuredPrefix || defaultPrefix)
+        .replace(/^(?:sensor|binary_sensor)\./, '')
+        .replace(/^\.+|\.+$/g, '') || defaultPrefix;
+      const logo = config.logo === undefined || config.logo === null
+        ? '/local/tellybox/dark_logo.png'
+        : String(config.logo).trim();
+
+      const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[character]));
+
+      const stateStore = (typeof hass === 'object' && hass && hass.states) ? hass.states : {};
+      const stateOf = (entityId) => {
+        const entity = stateStore[entityId];
+        return entity && typeof entity.state === 'string' ? entity.state : null;
+      };
+
+      const numberFrom = (entityId) => {
+        const state = stateOf(entityId);
+        if (state === null) return null;
+        const text = state.trim();
+        if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(text)) return null;
+        const value = Number(text);
+        return Number.isFinite(value) ? value : null;
+      };
+
+      const unitOf = (entityId, fallback) => {
+        const entity = stateStore[entityId];
+        const unit = entity && entity.attributes ? entity.attributes.unit_of_measurement : null;
+        return typeof unit === 'string' && unit.trim() ? unit.trim() : fallback;
+      };
+
+      const fixed = (value, digits) => {
+        if (!Number.isFinite(value)) return '—';
+        const text = value.toFixed(digits);
+        return /^-0(?:\.0+)?$/.test(text) ? text.slice(1) : text;
+      };
+
+      const countText = (entityId) => {
+        const value = numberFrom(entityId);
+        return value === null || value < 0 ? '—' : String(Math.round(value));
+      };
+
+      const secondsFrom = (entityId, unit) => {
+        const value = numberFrom(entityId);
+        if (value === null || value < 0) return null;
+        const normalised = String(unit || 's').trim().toLowerCase();
+        let factor;
+        if (['us', 'µs', 'microsecond', 'microseconds'].includes(normalised)) factor = 0.000001;
+        else if (['ms', 'millisecond', 'milliseconds'].includes(normalised)) factor = 0.001;
+        else if (['s', 'sec', 'secs', 'second', 'seconds'].includes(normalised)) factor = 1;
+        else if (['min', 'mins', 'minute', 'minutes'].includes(normalised)) factor = 60;
+        else if (['h', 'hr', 'hrs', 'hour', 'hours'].includes(normalised)) factor = 3600;
+        else if (['d', 'day', 'days'].includes(normalised)) factor = 86400;
+        else if (['w', 'week', 'weeks'].includes(normalised)) factor = 604800;
+        else return null;
+        const seconds = value * factor;
+        return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+      };
+
+      const uptimeText = (entityId, unit) => {
+        const seconds = secondsFrom(entityId, unit);
+        if (seconds === null) return '—';
+        const total = Math.floor(seconds);
+        const days = Math.floor(total / 86400);
+        const hours = Math.floor((total % 86400) / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const remaining = total % 60;
+        if (days > 0) return `${days}d ${hours}h`;
+        if (hours > 0) return `${hours}h ${minutes}m`;
+        if (minutes > 0) return `${minutes}m`;
+        return `${remaining}s`;
+      };
+
+      const entity = (domain, suffix) => `${domain}.${prefix}_${suffix}`;
+      const onlineId = entity('binary_sensor', 'online');
+      const activeId = entity('sensor', 'active_streams');
+      const connectedId = entity('sensor', 'connected_streams');
+      const localId = entity('sensor', 'local_streams');
+      const remoteId = entity('sensor', 'remote_streams');
+      const downloadsId = entity('sensor', 'active_downloads');
+      const measuredId = entity('sensor', 'measured_remote_upload');
+      const capId = entity('sensor', 'configured_upload_limit');
+      const uptimeId = entity('sensor', 'service_uptime');
+
+      const onlineState = stateOf(onlineId);
+      const online = onlineState === 'on';
+      const offline = onlineState === 'off';
+      const status = online ? 'ONLINE' : offline ? 'OFFLINE' : 'UNKNOWN';
+      const statusColor = online ? '#c7ed89' : offline ? '#ff9b9b' : '#f2c14e';
+      const statusBg = online ? 'rgba(199,237,137,.10)' : offline ? 'rgba(255,107,107,.10)' : 'rgba(242,193,78,.10)';
+      const statusBorder = online ? 'rgba(199,237,137,.26)' : offline ? 'rgba(255,107,107,.25)' : 'rgba(242,193,78,.25)';
+
+      const measured = numberFrom(measuredId);
+      const cap = numberFrom(capId);
+      const uploadUnit = unitOf(measuredId, 'Mbit/s');
+      const capUnit = unitOf(capId, uploadUnit);
+      const upload = measured === null || measured < 0 ? '—' : fixed(measured, 1);
+      const capText = cap === null || cap < 0 ? '—' : cap === 0 ? '∞' : fixed(cap, 0);
+      const uptime = uptimeText(uptimeId, unitOf(uptimeId, 's'));
+
+      const pct = online && measured !== null && measured >= 0 && cap !== null && cap > 0
+        ? Math.min(100, Math.max(0, (measured / cap) * 100))
+        : null;
+      const meterWidth = pct === null ? 0 : Number(pct.toFixed(1));
+      const meterColor = online && pct !== null
+        ? 'linear-gradient(90deg,#8fbf5a,#c7ed89)'
+        : 'rgba(166,175,161,.28)';
+      const meterLabel = !online
+        ? (offline ? 'Server offline - telemetry paused' : 'Telemetry unavailable')
+        : cap === null || cap < 0
+          ? 'Upload cap unavailable'
+          : cap === 0
+            ? 'Unlimited upload cap'
+            : measured === null || measured < 0
+              ? 'Upload rate unavailable'
+              : pct === null
+                ? 'Upload telemetry unavailable'
+                : `${pct.toFixed(0)}% of ${fixed(cap, 0)} ${escapeHtml(capUnit)} cap`;
+
+      const label = 'font-family:var(--ha-font-family-body,sans-serif);font-size:9px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8d9789';
+      const value = 'display:block;font-family:var(--ha-font-family-body,sans-serif);font-size:28px;font-weight:650;letter-spacing:-.03em;line-height:1;color:#f2f6ec;font-variant-numeric:tabular-nums';
+      const smallValue = 'display:block;font-family:var(--ha-font-family-body,sans-serif);font-size:18px;font-weight:650;line-height:1;color:#f2f6ec;font-variant-numeric:tabular-nums';
+      const cell = 'flex:1 1 64px;min-width:64px';
+      const logoHtml = logo
+        ? `<img src="${escapeHtml(logo)}" alt="Tellybox" style="display:block;height:36px;width:auto;max-width:170px;object-fit:contain" />`
+        : '<span style="font-family:var(--ha-font-family-body,sans-serif);font-size:22px;font-weight:700;color:#f2f6ec">Tellybox</span>';
+
+      return `
+        <div style="padding:20px 22px;border:1px solid rgba(199,237,137,.16);border-radius:22px;background:radial-gradient(700px 220px at 0% 0%,rgba(199,237,137,.12),transparent 60%),linear-gradient(160deg,#171c16,#0e120e);box-shadow:0 16px 40px rgba(0,0,0,.32);text-align:left">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            ${logoHtml}
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;border:1px solid ${statusBorder};background:${statusBg};color:${statusColor};font-family:var(--ha-font-family-body,sans-serif);font-size:9px;font-weight:700;letter-spacing:.14em;white-space:nowrap">
+              <span style="display:block;width:5px;height:5px;border-radius:50%;background:${statusColor}"></span>${status}
+            </span>
+          </div>
+
+          <div style="margin-top:13px;${label}">TELLYBOX SERVER · UP ${escapeHtml(uptime)}</div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:15px">
+            <div style="${cell}"><b style="${value}">${countText(activeId)}</b><span style="${label}">Watching</span></div>
+            <div style="${cell}"><b style="${value}">${upload}</b><span style="${label}">${escapeHtml(uploadUnit)} up</span></div>
+            <div style="${cell}"><b style="${value}">${capText}</b><span style="${label}">${cap === 0 ? 'Unlimited cap' : `${escapeHtml(capUnit)} cap`}</span></div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">
+            <div style="${cell}"><b style="${smallValue}">${countText(connectedId)}</b><span style="${label}">Connected</span></div>
+            <div style="${cell}"><b style="${smallValue}">${countText(localId)}</b><span style="${label}">Local</span></div>
+            <div style="${cell}"><b style="${smallValue}">${countText(remoteId)}</b><span style="${label}">Remote</span></div>
+            <div style="${cell}"><b style="${smallValue}">${countText(downloadsId)}</b><span style="${label}">Downloads</span></div>
+          </div>
+
+          <div style="margin-top:15px">
+            <div style="height:3px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden">
+              <div style="width:${meterWidth}%;height:100%;border-radius:99px;background:${meterColor}"></div>
+            </div>
+            <div style="margin-top:7px;${label};letter-spacing:.10em">${meterLabel}</div>
+          </div>
+        </div>
+      `;
+    ]]]
+styles:
+  card:
+    - padding: 0
+    - margin: 0
+    - background: transparent
+    - border: none
+    - border-radius: 0
+    - box-shadow: none
+    - overflow: visible
+  grid:
+    - grid-template-areas: '"panel"'
+    - grid-template-columns: 1fr
+  custom_fields:
+    panel:
+      - width: 100%
+      - justify-self: stretch
