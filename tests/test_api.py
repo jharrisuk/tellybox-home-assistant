@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import pathlib
 import sys
 import types
@@ -52,13 +53,45 @@ VALID = {
 }
 
 
+class Content:
+	"""Chunked body reader that does not need aiohttp's StreamReader."""
+
+	def __init__(self, body: bytes, error: Exception | None = None) -> None:
+		self._body = body
+		self._error = error
+		self._position = 0
+
+	async def read(self, size: int = -1) -> bytes:
+		if self._error:
+			raise self._error
+		remaining = len(self._body) - self._position
+		if remaining <= 0:
+			return b""
+		if size is None or size < 0:
+			size = remaining
+		chunk = self._body[self._position:self._position + size]
+		self._position += len(chunk)
+		return chunk
+
+
 class Response:
-	def __init__(self, status: int = 200, payload=None, headers=None, error: Exception | None = None, enter_error: Exception | None = None) -> None:
+	def __init__(
+		self,
+		status: int = 200,
+		payload=None,
+		headers=None,
+		error: Exception | None = None,
+		enter_error: Exception | None = None,
+		body: bytes | None = None,
+	) -> None:
 		self.status = status
 		self._payload = payload
 		self.headers = headers if headers is not None else {"Content-Type": "application/json"}
 		self._error = error
 		self._enter_error = enter_error
+		if body is None:
+			body = b"" if payload is None else json.dumps(payload).encode("utf-8")
+		self.content = Content(body, error)
 
 	async def __aenter__(self):
 		if self._enter_error:
@@ -67,11 +100,6 @@ class Response:
 
 	async def __aexit__(self, *args):
 		return False
-
-	async def json(self, content_type=None):
-		if self._error:
-			raise self._error
-		return self._payload
 
 
 class Session:
@@ -124,6 +152,17 @@ class ApiTests(unittest.TestCase):
 		for response, expected in cases:
 			with self.subTest(expected=expected.__name__):
 				with self.assertRaises(expected):
+					self.run_api(response)
+
+	def test_chunked_body_over_the_cap_is_rejected_without_content_length(self) -> None:
+		body = b"{" + b" " * (530 * 1024) + b"}"
+		responses = [
+			Response(body=body, headers={"Content-Type": "application/json"}),
+			Response(body=body, headers={"Content-Type": "application/json", "Content-Length": "10"}),
+		]
+		for response in responses:
+			with self.subTest(headers=response.headers):
+				with self.assertRaises(TellyboxApiError):
 					self.run_api(response)
 
 

@@ -58,7 +58,7 @@ custom_fields:
       const count = (...names) => { const v = num(...names); return v === null ? '—' : Math.round(v).toString(); };
       const attr = (names, key, fallback) => { const e = read(...names); return e?.attributes?.[key] ?? fallback; };
 
-      const fmtDuration = (names) => {
+      const fmtDuration = (...names) => {
         const e = read(...names);
         if (!e) return '—';
         const text = String(e.state).trim();
@@ -74,7 +74,7 @@ custom_fields:
         const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60);
         return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
       };
-      const fmtSize = (names) => {
+      const fmtSize = (...names) => {
         const e = read(...names);
         if (!e) return '—';
         const value = parseFloat(e.state);
@@ -83,16 +83,17 @@ custom_fields:
         return unit === 'B' ? (value / 1e9).toFixed(1) + ' GB' : value.toFixed(1) + ' ' + esc(unit);
       };
 
-      /* Status: maintenance outranks connectivity. */
-      const maint = state(id('binary_sensor', 'maintenance_mode'), id('binary_sensor', 'maintenance')) === 'on';
+      /* Status: offline wins over maintenance because a failed poll cannot confirm the flag. */
       const onlineState = state(id('binary_sensor', 'online'));
       const online = onlineState === 'on';
       const offline = onlineState === 'off';
-      const status = maint ? 'MAINTENANCE' : online ? 'ONLINE' : offline ? 'OFFLINE' : 'UNKNOWN';
+      const maintState = state(id('binary_sensor', 'maintenance_mode'), id('binary_sensor', 'maintenance'));
+      const maint = online && maintState === 'on';
+      const status = offline ? 'OFFLINE' : maint ? 'MAINTENANCE' : online ? 'ONLINE' : 'UNKNOWN';
       const amber = '#f2c14e';
-      const statusColor = maint ? amber : online ? '#c7ed89' : offline ? '#ff9b9b' : amber;
-      const statusBg = maint ? 'rgba(242,193,78,.12)' : online ? 'rgba(199,237,137,.10)' : offline ? 'rgba(255,107,107,.10)' : 'rgba(242,193,78,.10)';
-      const statusBorder = maint ? 'rgba(242,193,78,.30)' : online ? 'rgba(199,237,137,.26)' : offline ? 'rgba(255,107,107,.25)' : 'rgba(242,193,78,.25)';
+      const statusColor = offline ? '#ff9b9b' : maint ? amber : online ? '#c7ed89' : amber;
+      const statusBg = offline ? 'rgba(255,107,107,.10)' : maint ? 'rgba(242,193,78,.12)' : online ? 'rgba(199,237,137,.10)' : 'rgba(242,193,78,.10)';
+      const statusBorder = offline ? 'rgba(255,107,107,.25)' : maint ? 'rgba(242,193,78,.30)' : online ? 'rgba(199,237,137,.26)' : 'rgba(242,193,78,.25)';
 
       /* Metrics. */
       const active = count(id('sensor', 'active_streams'));
@@ -102,7 +103,7 @@ custom_fields:
       const local = count(id('sensor', 'local_streams'));
       const remote = count(id('sensor', 'remote_streams'));
       const downloads = count(id('sensor', 'active_downloads'));
-      const plays = count(id('sensor', 'plays'));
+      const plays = count(id('sensor', 'play_requests_24_hours'), id('sensor', 'plays'));
 
       const measuredNames = [id('sensor', 'measured_remote_upload')];
       const capNames = [id('sensor', 'configured_upload_limit')];
@@ -116,11 +117,18 @@ custom_fields:
       const serviceUp = fmtDuration(id('sensor', 'service_uptime'));
       const hostUp = fmtDuration(id('sensor', 'host_uptime'));
 
+      const memUsage = num(id('sensor', 'memory_usage'));
       const memTotal = num(id('sensor', 'memory_total'));
       const memFree = num(id('sensor', 'memory_available'));
-      const memPct = (memTotal !== null && memFree !== null && memTotal > 0)
-        ? Math.round((1 - memFree / memTotal) * 100) : null;
-      const diskFree = fmtSize(id('sensor', 'media_disk_available_space'));
+      const memPct = memUsage !== null ? Math.round(memUsage)
+        : (memTotal !== null && memFree !== null && memTotal > 0)
+          ? Math.round((1 - memFree / memTotal) * 100) : null;
+
+      /* Disks are named after the server's label, so find the first matching sensor. */
+      const diskStart = id('sensor', '');
+      const diskKeys = Object.keys(S || {}).filter(key => key.startsWith(diskStart) && key.endsWith('_available_space'));
+      const diskKey = diskKeys.find(key => key.toLowerCase().includes('media')) || diskKeys[0] || null;
+      const diskFree = diskKey === null ? '—' : fmtSize(diskKey);
 
       const pct = online && measured !== null && cap !== null && cap > 0
         ? Math.min(100, Math.max(0, (measured / cap) * 100)) : null;
@@ -177,7 +185,7 @@ custom_fields:
             <span>Host up ${hostUp}</span>
             <span>Memory ${memPct === null ? '—' : memPct + '%'}</span>
             <span>Disk ${diskFree} free</span>
-            ${plays !== '—' ? `<span>${plays} plays</span>` : ''}
+            ${plays !== '—' ? `<span>${plays} plays · 24h</span>` : ''}
           </div>
         </div>
       `;

@@ -23,7 +23,7 @@ EXPECTED_ENTITIES = {
 	"sensor.tellybox_active_downloads",
 	"sensor.tellybox_measured_remote_upload",
 	"sensor.tellybox_configured_upload_limit",
-	"sensor.tellybox_uptime",
+	"sensor.tellybox_service_uptime",
 	"sensor.tellybox_cpu_usage",
 	"sensor.tellybox_memory_usage",
 }
@@ -39,7 +39,7 @@ SUMMARY_VALUES = {
 	"sensor.tellybox_configured_upload_limit": "50",
 	"sensor.tellybox_cpu_usage": "12.5",
 	"sensor.tellybox_memory_usage": "42.1",
-	"sensor.tellybox_uptime": "93784",
+	"sensor.tellybox_service_uptime": "93784",
 }
 
 
@@ -248,16 +248,16 @@ class DashboardTests(unittest.TestCase):
 		entities = list(EXPECTED_ENTITIES)
 		for unit, state in (("s", "93784"), ("h", "26.05"), ("d", "1.085"), ("min", "1562.4")):
 			states = dict(SUMMARY_VALUES)
-			states["sensor.tellybox_uptime"] = state
+			states["sensor.tellybox_service_uptime"] = state
 			attributes = {entity: {} for entity in entities}
 			attributes["binary_sensor.tellybox_online"]["device_class"] = "connectivity"
-			attributes["sensor.tellybox_uptime"]["unit_of_measurement"] = unit
+			attributes["sensor.tellybox_service_uptime"]["unit_of_measurement"] = unit
 			rendered = render(summary, FakeHomeAssistant(entities, states, attributes))
 			self.assertIn("uptime 1d 2h", rendered, unit)
 
 		attributes = {entity: {} for entity in entities}
 		attributes["binary_sensor.tellybox_online"]["device_class"] = "connectivity"
-		attributes["sensor.tellybox_uptime"]["unit_of_measurement"] = "fortnight"
+		attributes["sensor.tellybox_service_uptime"]["unit_of_measurement"] = "fortnight"
 		rendered = render(summary, FakeHomeAssistant(entities, dict(SUMMARY_VALUES), attributes))
 		self.assertIn("uptime —", rendered)
 

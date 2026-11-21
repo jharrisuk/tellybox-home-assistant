@@ -60,7 +60,7 @@ views:
                 'remote': 'sensor.tellybox_remote_streams',
                 'downloads': 'sensor.tellybox_active_downloads',
                 'measured': 'sensor.tellybox_measured_remote_upload',
-                'uptime': 'sensor.tellybox_uptime'
+                'uptime': 'sensor.tellybox_service_uptime'
               } %}
               {% macro scoped(entity_id) -%}
                 {%- if entity_id in selected -%}{{ entity_id }}{%- endif -%}
@@ -210,7 +210,7 @@ views:
               - from: 90
                 color: "#FF6B6B"
           - type: tile
-            entity: sensor.tellybox_uptime
+            entity: sensor.tellybox_service_uptime
             name: Service uptime
             icon: mdi:clock-outline
             color: "#C7ED89"

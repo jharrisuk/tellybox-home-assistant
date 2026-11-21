@@ -84,7 +84,7 @@ class ManifestTests(unittest.TestCase):
 			"https://github.com/jharrisuk/tellybox-home-assistant/issues",
 		)
 		self.assertTrue(self.manifest["config_flow"])
-		self.assertEqual(self.manifest["version"], "0.2.0")
+		self.assertEqual(self.manifest["version"], "0.2.1")
 		self.assertEqual(self.manifest["integration_type"], "hub")
 		self.assertEqual(self.manifest["iot_class"], "local_polling")
 		self.assertEqual(self.manifest["requirements"], [])

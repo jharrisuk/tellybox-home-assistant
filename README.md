@@ -102,17 +102,17 @@ Entity IDs depend on the config entry title, so the IDs below are placeholders. 
 | `sensor.tellybox_active_downloads` | Current downloads. |
 | `sensor.tellybox_measured_remote_upload` | Measured remote upload in Mbit/s. |
 | `sensor.tellybox_configured_upload_limit` | Configured upload cap in Mbit/s. `0` means unlimited. |
-| `sensor.tellybox_uptime` | Tellybox service uptime. |
+| `sensor.tellybox_service_uptime` | Tellybox service uptime. |
 | `sensor.tellybox_cpu_usage` | Host CPU percentage. |
 | `sensor.tellybox_memory_usage` | Host memory percentage. |
 | `sensor.tellybox_viewers` | Distinct people watching now. |
 | `sensor.tellybox_paused_streams` | Sessions paused inside the server's recent window. |
-| `sensor.tellybox_plays` | Playback sessions recorded by the server. |
-| `sensor.tellybox_failed_plays` | Playback failures recorded by the server. |
+| `sensor.tellybox_play_requests_24_hours` | Play requests recorded by the server in the last 24 hours. |
+| `sensor.tellybox_failed_or_limited_sign_ins_24_hours` | Failed or limited sign-in attempts in the last 24 hours. |
 | `sensor.tellybox_host_uptime` | Host uptime, separate from the service uptime. |
 | `sensor.tellybox_memory_total` | Host memory total. |
 | `sensor.tellybox_memory_available` | Host memory available. |
-| `binary_sensor.tellybox_maintenance` | On while maintenance mode is active. |
+| `binary_sensor.tellybox_maintenance_mode` | On while maintenance mode is active. |
 
 The **Overview** and **Storage** cards are scoped to one entry. They use `device_id('binary_sensor.tellybox_online')` to find the device and `device_entities()` to list only that device's entities, then match the explicit placeholder IDs above. They do not match English entity names. Replace every placeholder consistently with the entity IDs from the same Tellybox entry, including the online ID used by both cards. Entities from another Tellybox installation are ignored, so a multi-installation system does not blend values. Storage lists only `data_size` sensors on that device.
 
@@ -195,7 +195,7 @@ The HACS validation workflow checks the integration, brand assets and repository
 
 ## Updates and releases
 
-- HACS or the Marketplace offers an update when a new GitHub release is published. The repository version is `0.1.1`.
+- HACS or the Marketplace offers an update when a new GitHub release is published. The repository version is `0.2.1`.
 - Choose **Update**, then restart Home Assistant. Replacing files alone does not reload the Python integration. The Marketplace shows a repair when a restart is needed.
 - HACS and the Marketplace use published GitHub releases. A tag without a published release is not enough.
 - This repository is not in the default catalogue. Every user must add the custom repository URL above. It is not discovered, installed or updated automatically outside HACS or the Marketplace.
@@ -212,7 +212,7 @@ The integration only calls `GET /api/integrations/home-assistant/stats`. It neve
 - Host CPU and memory percentages from the existing host-health collector.
 - Total and available host memory in bytes.
 - Available bytes for each host disk, keyed by a stable sanitised disk ID.
-- An optional connectivity binary sensor and a maintenance-mode binary sensor.
+- A connectivity binary sensor and a maintenance-mode binary sensor.
 
 It does not expose viewing titles, history, account details, IP addresses, file paths, provider URLs or any write action.
 
@@ -229,11 +229,11 @@ Entity IDs depend on the config entry title, which includes the server address. 
 | `paused_streams` | `sensor...paused_streams` | Paused playback sessions. |
 | `viewers` | `sensor...viewers` | Current viewers across active sessions. |
 | `active_downloads` | `sensor...active_downloads` | Current downloads. |
-| `plays` | `sensor...plays` | Play requests in the last 24 hours. Diagnostic. |
-| `failed_plays` | `sensor...failed_plays` | Failed or limited sign-in attempts in the last 24 hours. Diagnostic. |
+| `plays` | `sensor...play_requests_24_hours` | Play requests in the last 24 hours. Diagnostic. |
+| `failed_plays` | `sensor...failed_or_limited_sign_ins_24_hours` | Failed or limited sign-in attempts in the last 24 hours. Diagnostic. |
 | `measured_remote_upload` | `sensor...measured_remote_upload` | Measured remote upload in Mbit/s. |
 | `configured_upload_limit` | `sensor...configured_upload_limit` | Configured upload cap in Mbit/s. `0` means unlimited. |
-| `uptime` | `sensor...uptime` | Tellybox service uptime. |
+| `uptime` | `sensor...service_uptime` | Tellybox service uptime. |
 | `host_uptime` | `sensor...host_uptime` | Host uptime. Diagnostic. |
 | `cpu_usage` | `sensor...cpu_usage` | Host CPU percentage. |
 | `memory_usage` | `sensor...memory_usage` | Host memory percentage. |
@@ -241,7 +241,7 @@ Entity IDs depend on the config entry title, which includes the server address. 
 | `memory_available` | `sensor...memory_available` | Available host memory. Diagnostic. |
 | Disk sensor | `sensor...available_space` | Free space for one disk. Native bytes, displayed in GB by default. |
 | `online` | `binary_sensor...online` | Whether the last statistics poll succeeded. |
-| `maintenance` | `binary_sensor...maintenance` | Whether the server's maintenance mode is enabled. Diagnostic. |
+| `maintenance` | `binary_sensor...maintenance_mode` | Whether the server's maintenance mode is enabled. Diagnostic. |
 
 A value is unavailable when the server reports it as missing or stale. The integration does not turn missing CPU, memory, uptime or disk readings into zero. A real zero, such as no active streams, remains `0`.
 
@@ -271,7 +271,7 @@ From the repository root:
 python -m pytest
 ```
 
-The test suite covers URL and token validation, the statistics allowlist, failure mapping, config and reconfiguration flows, entity translation keys, disk unit conversion through Home Assistant, dashboard YAML and template syntax, the compact card, the button-card YAML and JavaScript behaviour, and packaging requirements. CI also runs the button-card logic tests, the HACS validation action and hassfest.
+The test suite covers URL and token validation, the statistics allowlist, failure mapping, config and reconfiguration flows, entity translation keys, disk unit conversion through Home Assistant, dashboard YAML and template syntax, the compact card, the button-card and panel-card YAML and JavaScript behaviour, and packaging requirements. CI also runs the button-card and panel-card logic tests, the HACS validation action and hassfest.
 
 ## Licence
 
@@ -289,11 +289,18 @@ server reports one.
 It uses the same `entity_prefix` and `logo` variables as
 `dashboard-button-card.yaml`, so set the prefix once in the same way.
 
-- **Maintenance:** the status pill reads **MAINTENANCE** in amber and outranks
-  online/offline, because a planned outage is not a fault.
-- **Missing values:** every reading falls back to an em dash. Memory percentage
-  is only computed when both memory sensors are present; the disk line uses the
-  media disk sensor's own unit.
+- **Maintenance:** the status pill reads **MAINTENANCE** in amber only while the
+  online sensor confirms the poll is succeeding. If the poll fails, **OFFLINE**
+  wins over a last-seen maintenance flag, because an unreachable server cannot
+  confirm that maintenance mode is still active.
+- **Missing values:** every reading falls back to an em dash. The play count
+  reads `sensor.<prefix>_play_requests_24_hours` and falls back to the older
+  `sensor.<prefix>_plays` suffix; the footer labels it **plays · 24h**. The disk
+  line scans the states for the first sensor ending
+  `_available_space` (for example `_media_disk_available_space` or
+  `_media_available_space`), preferring one whose ID contains `media`, and
+  uses that sensor's own unit. Memory prefers `sensor.<prefix>_memory_usage` and
+  falls back to the total/available byte calculation only when it is absent.
 - **Compatibility:** a server that does not send the newer fields leaves those
   entities unavailable, and the card shows dashes rather than zeros.
 

@@ -77,10 +77,10 @@ def _optional_maintenance(value: Any) -> dict[str, bool] | None:
 	return {"enabled": value["enabled"]}
 
 
-def _mapping(value: Any, label: str) -> dict[str, Any]:
-	if not isinstance(value, dict):
-		raise StatsFormatError(f"The {label} section is missing.")
-	return value
+def _section(payload: dict[str, Any], key: str) -> dict[str, Any]:
+	"""Return one optional top-level section, degrading to an empty mapping."""
+	value = payload.get(key)
+	return value if isinstance(value, dict) else {}
 
 
 def _text(value: Any, limit: int = 128) -> str | None:
@@ -100,10 +100,10 @@ def parse_stats(payload: Any) -> dict[str, Any]:
 	if not isinstance(raw_installation_id, str) or not raw_installation_id.strip() or len(raw_installation_id.strip()) > 128:
 		raise StatsFormatError("The server did not return a stable installation ID.")
 	installation_id = raw_installation_id.strip()
-	server = _mapping(payload.get("server"), "server")
-	streams = _mapping(payload.get("streams"), "streams")
-	downloads = _mapping(payload.get("downloads"), "downloads")
-	upload = _mapping(payload.get("upload"), "upload")
+	server = _section(payload, "server")
+	streams = _section(payload, "streams")
+	downloads = _section(payload, "downloads")
+	upload = _section(payload, "upload")
 	host_status = server.get("hostStatus")
 	if host_status not in ("ok", "stale", "missing"):
 		host_status = "missing"
@@ -128,7 +128,7 @@ def parse_stats(payload: Any) -> dict[str, Any]:
 				"used_bytes": _optional_number(disk.get("usedBytes")) if host_ok else None,
 			})
 	unlimited = upload.get("unlimited")
-	activity = payload.get("activity") if isinstance(payload.get("activity"), dict) else {}
+	activity = _section(payload, "activity")
 	return {
 		"installation_id": installation_id,
 		"generated_at": _optional_number(payload.get("generatedAt")),

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import aiohttp
 
 from .const import DEFAULT_SCAN_INTERVAL, REQUEST_TIMEOUT, STATS_PATH
 from .stats import StatsFormatError, normalize_server_url, normalize_token, parse_stats
+
+MAX_RESPONSE_BYTES = 512 * 1024
+READ_CHUNK_BYTES = 64 * 1024
 
 
 class TellyboxError(Exception):
@@ -50,9 +54,22 @@ class TellyboxApi:
 				if "application/json" not in content_type.lower():
 					raise TellyboxApiError("Tellybox returned an unexpected response type.")
 				length = response.headers.get("Content-Length")
-				if length and length.isdigit() and int(length) > 512 * 1024:
+				if length and length.isdigit() and int(length) > MAX_RESPONSE_BYTES:
 					raise TellyboxApiError("Tellybox returned an oversized statistics response.")
-				payload = await response.json(content_type=None)
+				chunks: list[bytes] = []
+				size = 0
+				while True:
+					chunk = await response.content.read(READ_CHUNK_BYTES)
+					if not chunk:
+						break
+					size += len(chunk)
+					if size > MAX_RESPONSE_BYTES:
+						raise TellyboxApiError("Tellybox returned an oversized statistics response.")
+					chunks.append(chunk)
+				try:
+					payload = json.loads(b"".join(chunks))
+				except (ValueError, RecursionError) as error:
+					raise TellyboxApiError("Tellybox returned invalid JSON.") from error
 		except TellyboxError:
 			raise
 		except TimeoutError as error:

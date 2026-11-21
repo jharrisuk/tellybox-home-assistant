@@ -102,6 +102,42 @@ class ParserTests(unittest.TestCase):
 		self.assertEqual(data["activity"], {"plays": None, "failed": None, "remote_ips": None})
 		self.assertIsNone(data["maintenance"])
 
+	def test_missing_top_level_sections_degrade_instead_of_failing(self) -> None:
+		for section in ("server", "streams", "downloads", "upload"):
+			payload = {key: value for key, value in VALID.items() if key != section}
+			with self.subTest(section=section):
+				data = parse_stats(payload)
+				if section == "server":
+					self.assertEqual(data["server"]["host_status"], "missing")
+					self.assertIsNone(data["server"]["version"])
+					self.assertIsNone(data["server"]["uptime_seconds"])
+					self.assertEqual(data["server"]["disks"], [])
+				elif section == "streams":
+					self.assertEqual(set(data["streams"].values()), {None})
+				elif section == "downloads":
+					self.assertIsNone(data["downloads"]["active"])
+				else:
+					self.assertIsNone(data["upload"]["configured_mbps"])
+					self.assertIsNone(data["upload"]["measured_mbps"])
+					self.assertIsNone(data["upload"]["measurement_seconds"])
+		# A present but non-mapping section degrades the same way as an absent one.
+		readers = {
+			"server": lambda data: data["server"]["version"],
+			"streams": lambda data: data["streams"]["active"],
+			"downloads": lambda data: data["downloads"]["active"],
+			"upload": lambda data: data["upload"]["configured_mbps"],
+		}
+		for section, read in readers.items():
+			for bad_value in (None, "not a mapping"):
+				with self.subTest(section=section, value=bad_value):
+					self.assertIsNone(read(parse_stats({**VALID, section: bad_value})))
+		# The full payload still parses every section.
+		data = parse_stats(VALID)
+		self.assertEqual(data["server"]["disks"][0]["available_bytes"], 500)
+		self.assertEqual(data["streams"]["viewers"], 2)
+		self.assertEqual(data["downloads"]["active"], 0)
+		self.assertEqual(data["upload"]["configured_mbps"], 50)
+
 	def test_new_fields_are_defensively_coerced_and_never_become_zero(self) -> None:
 		payload = {
 			**VALID,
@@ -156,7 +192,7 @@ class ParserTests(unittest.TestCase):
 		self.assertEqual(data["server"]["disks"][0]["name"], "Disk")
 
 	def test_rejects_unknown_schema_and_missing_identity(self) -> None:
-		for payload in [{**VALID, "schemaVersion": 2}, {**VALID, "schema": "other"}, {**VALID, "installationId": ""}, {**VALID, "server": None}, "not an object"]:
+		for payload in [{**VALID, "schemaVersion": 2}, {**VALID, "schema": "other"}, {**VALID, "installationId": ""}, "not an object"]:
 			with self.subTest(payload=payload):
 				with self.assertRaises(StatsFormatError):
 					parse_stats(payload)
