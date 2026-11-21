@@ -278,6 +278,7 @@ The test suite covers URL and token validation, the statistics allowlist, failur
 The integration, tests, documentation, dashboard example and theme in this repository are source-available under the PolyForm Noncommercial License 1.0.0. See `LICENSE`, `NOTICE` and `LICENSE-SCOPE.md`. This is not an OSI-approved open-source licence. Commercial use requires separate permission from the rightsholders. Third-party components, including Home Assistant and HACS, remain under their own licences. Tellybox brand assets are included for integration identification and are not licensed as general-purpose artwork.
 
 ### 6. Full panel card (optional)
+![The Tellybox panel card showing status, viewers, paused sessions, upload, memory and disk](docs/tellybox-panel.png)
 
 `dashboard-panel-card.yaml` is a wider `custom:button-card` panel for the new
 statistics. It shows status and maintenance, who is watching, paused sessions,
