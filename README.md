@@ -105,6 +105,14 @@ Entity IDs depend on the config entry title, so the IDs below are placeholders. 
 | `sensor.tellybox_uptime` | Tellybox service uptime. |
 | `sensor.tellybox_cpu_usage` | Host CPU percentage. |
 | `sensor.tellybox_memory_usage` | Host memory percentage. |
+| `sensor.tellybox_viewers` | Distinct people watching now. |
+| `sensor.tellybox_paused_streams` | Sessions paused inside the server's recent window. |
+| `sensor.tellybox_plays` | Playback sessions recorded by the server. |
+| `sensor.tellybox_failed_plays` | Playback failures recorded by the server. |
+| `sensor.tellybox_host_uptime` | Host uptime, separate from the service uptime. |
+| `sensor.tellybox_memory_total` | Host memory total. |
+| `sensor.tellybox_memory_available` | Host memory available. |
+| `binary_sensor.tellybox_maintenance` | On while maintenance mode is active. |
 
 The **Overview** and **Storage** cards are scoped to one entry. They use `device_id('binary_sensor.tellybox_online')` to find the device and `device_entities()` to list only that device's entities, then match the explicit placeholder IDs above. They do not match English entity names. Replace every placeholder consistently with the entity IDs from the same Tellybox entry, including the online ID used by both cards. Entities from another Tellybox installation are ignored, so a multi-installation system does not blend values. Storage lists only `data_size` sensors on that device.
 
@@ -268,3 +276,25 @@ The test suite covers URL and token validation, the statistics allowlist, failur
 ## Licence
 
 The integration, tests, documentation, dashboard example and theme in this repository are source-available under the PolyForm Noncommercial License 1.0.0. See `LICENSE`, `NOTICE` and `LICENSE-SCOPE.md`. This is not an OSI-approved open-source licence. Commercial use requires separate permission from the rightsholders. Third-party components, including Home Assistant and HACS, remain under their own licences. Tellybox brand assets are included for integration identification and are not licensed as general-purpose artwork.
+
+### 6. Full panel card (optional)
+
+`dashboard-panel-card.yaml` is a wider `custom:button-card` panel for the new
+statistics. It shows status and maintenance, who is watching, paused sessions,
+upload against the cap, downloads, connected/local/remote sessions, host and
+service uptime, memory use and free disk space, plus a play count when the
+server reports one.
+
+It uses the same `entity_prefix` and `logo` variables as
+`dashboard-button-card.yaml`, so set the prefix once in the same way.
+
+- **Maintenance:** the status pill reads **MAINTENANCE** in amber and outranks
+  online/offline, because a planned outage is not a fault.
+- **Missing values:** every reading falls back to an em dash. Memory percentage
+  is only computed when both memory sensors are present; the disk line uses the
+  media disk sensor's own unit.
+- **Compatibility:** a server that does not send the newer fields leaves those
+  entities unavailable, and the card shows dashes rather than zeros.
+
+Install the button-card frontend dependency and copy the wordmark exactly as
+described above. This card does not need card-mod.
