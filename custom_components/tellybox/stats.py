@@ -71,6 +71,12 @@ def _optional_count(value: Any) -> int | None:
 	return value if value >= 0 else None
 
 
+def _optional_maintenance(value: Any) -> dict[str, bool] | None:
+	if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
+		return None
+	return {"enabled": value["enabled"]}
+
+
 def _mapping(value: Any, label: str) -> dict[str, Any]:
 	if not isinstance(value, dict):
 		raise StatsFormatError(f"The {label} section is missing.")
@@ -122,6 +128,7 @@ def parse_stats(payload: Any) -> dict[str, Any]:
 				"used_bytes": _optional_number(disk.get("usedBytes")) if host_ok else None,
 			})
 	unlimited = upload.get("unlimited")
+	activity = payload.get("activity") if isinstance(payload.get("activity"), dict) else {}
 	return {
 		"installation_id": installation_id,
 		"generated_at": _optional_number(payload.get("generatedAt")),
@@ -142,7 +149,14 @@ def parse_stats(payload: Any) -> dict[str, Any]:
 			"paused": _optional_count(streams.get("paused")),
 			"local": _optional_count(streams.get("local")),
 			"remote": _optional_count(streams.get("remote")),
+			"viewers": _optional_count(streams.get("viewers")),
 		},
+		"activity": {
+			"plays": _optional_count(activity.get("plays")),
+			"failed": _optional_count(activity.get("failed")),
+			"remote_ips": _optional_count(activity.get("remoteIps")),
+		},
+		"maintenance": _optional_maintenance(payload.get("maintenance")),
 		"downloads": {"active": _optional_count(downloads.get("active"))},
 		"upload": {
 			"configured_mbps": _optional_number(upload.get("configuredMbps")),

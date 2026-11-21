@@ -196,13 +196,15 @@ The HACS validation workflow checks the integration, brand assets and repository
 
 The integration only calls `GET /api/integrations/home-assistant/stats`. It never reads the normal viewer API and exposes only these aggregate values:
 
-- Active, connected, local and remote stream counts.
+- Active, connected, local, remote, paused and viewer stream counts.
 - Active download count.
+- 24-hour play and failed sign-in counts.
 - Measured remote upload rate and the configured upload cap.
-- Tellybox service uptime.
+- Tellybox service uptime and host uptime.
 - Host CPU and memory percentages from the existing host-health collector.
+- Total and available host memory in bytes.
 - Available bytes for each host disk, keyed by a stable sanitised disk ID.
-- An optional connectivity binary sensor.
+- An optional connectivity binary sensor and a maintenance-mode binary sensor.
 
 It does not expose viewing titles, history, account details, IP addresses, file paths, provider URLs or any write action.
 
@@ -216,14 +218,22 @@ Entity IDs depend on the config entry title, which includes the server address. 
 | `connected_streams` | `sensor...connected_streams` | Sessions inside the server's recent window, including paused sessions. |
 | `local_streams` | `sensor...local_streams` | Connected sessions using the direct local media route. |
 | `remote_streams` | `sensor...remote_streams` | Connected sessions using the remote relay route. |
+| `paused_streams` | `sensor...paused_streams` | Paused playback sessions. |
+| `viewers` | `sensor...viewers` | Current viewers across active sessions. |
 | `active_downloads` | `sensor...active_downloads` | Current downloads. |
+| `plays` | `sensor...plays` | Play requests in the last 24 hours. Diagnostic. |
+| `failed_plays` | `sensor...failed_plays` | Failed or limited sign-in attempts in the last 24 hours. Diagnostic. |
 | `measured_remote_upload` | `sensor...measured_remote_upload` | Measured remote upload in Mbit/s. |
 | `configured_upload_limit` | `sensor...configured_upload_limit` | Configured upload cap in Mbit/s. `0` means unlimited. |
 | `uptime` | `sensor...uptime` | Tellybox service uptime. |
+| `host_uptime` | `sensor...host_uptime` | Host uptime. Diagnostic. |
 | `cpu_usage` | `sensor...cpu_usage` | Host CPU percentage. |
 | `memory_usage` | `sensor...memory_usage` | Host memory percentage. |
+| `memory_total` | `sensor...memory_total` | Total host memory. Diagnostic. |
+| `memory_available` | `sensor...memory_available` | Available host memory. Diagnostic. |
 | Disk sensor | `sensor...available_space` | Free space for one disk. Native bytes, displayed in GB by default. |
 | `online` | `binary_sensor...online` | Whether the last statistics poll succeeded. |
+| `maintenance` | `binary_sensor...maintenance` | Whether the server's maintenance mode is enabled. Diagnostic. |
 
 A value is unavailable when the server reports it as missing or stale. The integration does not turn missing CPU, memory, uptime or disk readings into zero. A real zero, such as no active streams, remains `0`.
 

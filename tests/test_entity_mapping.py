@@ -28,14 +28,17 @@ class EntityMappingTests(unittest.TestCase):
 		sensor_keys = translation_keys(COMPONENT / "sensor.py")
 		self.assertEqual(sensor_keys, {
 			"active_streams", "connected_streams", "local_streams", "remote_streams",
-			"active_downloads", "measured_remote_upload", "configured_upload_limit",
-			"uptime", "cpu_usage", "memory_usage",
+			"paused_streams", "viewers", "active_downloads", "plays", "failed_plays",
+			"measured_remote_upload", "configured_upload_limit", "uptime", "host_uptime",
+			"cpu_usage", "memory_usage", "memory_total", "memory_available",
 		})
 		for key in sensor_keys:
 			self.assertIn("name", strings["entity"]["sensor"][key], key)
 		binary = (COMPONENT / "binary_sensor.py").read_text(encoding="utf-8")
 		self.assertIn('_attr_translation_key = "online"', binary)
+		self.assertIn('_attr_translation_key = "maintenance"', binary)
 		self.assertIn("name", strings["entity"]["binary_sensor"]["online"])
+		self.assertIn("name", strings["entity"]["binary_sensor"]["maintenance"])
 
 	def test_first_version_has_no_media_player_switch_or_button_platform(self) -> None:
 		for path in COMPONENT.glob("*.py"):
